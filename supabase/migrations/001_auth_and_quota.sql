@@ -6,7 +6,7 @@
 
 -- 1. 创建用户配额表
 create table if not exists public.user_quotas (
-  id uuid not null default uuid_generate_v4() primary key,
+  id uuid not null default gen_random_uuid() primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
   date date not null default current_date,
   script_count integer default 0,
