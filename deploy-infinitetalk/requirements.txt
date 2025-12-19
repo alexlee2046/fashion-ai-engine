@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+requests
+pydantic
+numpy
+opencv-python
+tqdm
+librosa
+scipy
+ffmpeg-python
+# 加上 InfiniteTalk 自身需要的库，例如：
+# transformers
+# accelerate
+# diffusers
