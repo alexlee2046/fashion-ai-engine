@@ -7,6 +7,24 @@ const PROTECTED_ROUTES = ['/', '/generate']
 const AUTH_ROUTES = ['/login', '/signup']
 
 export async function middleware(request: NextRequest) {
+  const shadow = process.env.SHADOW_NOINDEX === '1'
+  let response: NextResponse
+  if (request.nextUrl.pathname === '/health') {
+    response = NextResponse.next()
+  } else if (shadow && request.nextUrl.pathname === '/robots.txt') {
+    response = new NextResponse('User-agent: *\nDisallow: /\n', {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    })
+  } else {
+    response = await authenticate(request)
+  }
+  if (shadow) {
+    response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive')
+  }
+  return response
+}
+
+async function authenticate(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(

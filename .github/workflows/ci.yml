@@ -1,0 +1,46 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-not-a-credential
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - name: Build container
+        run: |
+          docker build --build-arg NEXT_PUBLIC_SUPABASE_URL --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY -t fashion-ai-engine:ci .
+      - name: Smoke test shadow container without credentials
+        run: |
+          docker run -d --name fashion-ci -p 127.0.0.1:3000:3000 fashion-ai-engine:ci
+          trap 'docker logs fashion-ci; docker rm -f fashion-ci' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/health > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS -D /tmp/health-headers http://127.0.0.1:3000/health | grep '"status":"ok"'
+          grep -qi 'x-robots-tag: noindex, nofollow, noarchive' /tmp/health-headers
+          curl -fsS http://127.0.0.1:3000/robots.txt | grep 'Disallow: /'
+          docker exec fashion-ci wget -Y off -q -O /dev/null http://127.0.0.1:3000/health
+          docker rm -f fashion-ci
+          docker run -d --name fashion-ci -e SHADOW_NOINDEX=0 -p 127.0.0.1:3000:3000 fashion-ai-engine:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/health > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS -D /tmp/live-headers http://127.0.0.1:3000/health | grep '"status":"ok"'
+          if grep -qi 'x-robots-tag:' /tmp/live-headers; then exit 1; fi
