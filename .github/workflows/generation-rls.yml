@@ -1,0 +1,34 @@
+name: Generation RLS
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/**'
+      - 'supabase_schema.sql'
+      - '.github/workflows/generation-rls.yml'
+permissions:
+  contents: read
+jobs:
+  generation-ownership:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: disposable-ci-only
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ownership regression against disposable PostgreSQL
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: ${{ job.services.postgres.ports[5432] }}
+          PGUSER: postgres
+          PGPASSWORD: disposable-ci-only
+        run: psql -X -f supabase/tests/generation_ownership.sql
