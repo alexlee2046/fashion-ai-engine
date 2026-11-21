@@ -44,7 +44,7 @@ export type TaskStatusResponse = ApiResponse<{
   status: TaskStatus;
   progress: number;
   resultUrl?: string;
-}>;
+}> & { notFound?: true };
 
 // ============================================
 // 图片上传
@@ -249,10 +249,13 @@ export async function getGenerationStatus(generationId: string): Promise<TaskSta
       .from('generations')
       .select('*')
       .eq('id', generationId)
-      .single();
+      .maybeSingle();
 
-    if (dbError || !generation) {
-      return { success: false, error: '任务不存在' };
+    if (dbError) {
+      return { success: false, error: '查询失败，请重试' };
+    }
+    if (!generation) {
+      return { success: false, error: '任务不存在', notFound: true };
     }
 
     // 2. 如果已完成或失败，直接返回
