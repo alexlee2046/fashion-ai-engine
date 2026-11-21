@@ -30,8 +30,9 @@ grant select, insert, update on public.generations to authenticated, anon;
 
 do $$
 begin
-  if not exists (select 1 from public.generations where type = 'legacy-unassigned' and user_id is null) then
-    raise exception 'Unassigned legacy row must be retained without guessing its owner';
+  if (select array_agg(type order by type) from public.generations where user_id is null)
+    is distinct from array['legacy-linked', 'legacy-unassigned'] then
+    raise exception 'Legacy rows must be retained without guessing their owner';
   end if;
 end $$;
 
@@ -40,9 +41,8 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
 do $$
 declare owner_id uuid;
 begin
-  if (select array_agg(type order by type) from public.generations)
-    is distinct from array['legacy-linked'] then
-    raise exception 'Backfilled row must be visible to its owner only';
+  if exists (select 1 from public.generations) then
+    raise exception 'A legacy campaign link must not grant access';
   end if;
 
   insert into public.generations (type) values ('standalone') returning user_id into owner_id;
