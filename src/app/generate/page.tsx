@@ -40,6 +40,7 @@ export default function GeneratePage() {
     return () => {
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
+        pollingRef.current = null;
       }
     };
   }, []);
@@ -91,8 +92,16 @@ export default function GeneratePage() {
     }));
 
     // 3. 轮询任务状态
-    pollingRef.current = setInterval(async () => {
+    const polling = setInterval(async () => {
       const statusResult = await getGenerationStatus(taskId);
+      if (pollingRef.current !== polling) return;
+
+      if (statusResult.notFound) {
+        clearInterval(polling);
+        pollingRef.current = null;
+        setState((prev) => ({ ...prev, step: 'error', error: statusResult.error }));
+        return;
+      }
 
       if (!statusResult.success || !statusResult.data) {
         return;
@@ -101,9 +110,8 @@ export default function GeneratePage() {
       const { status, progress, resultUrl } = statusResult.data;
 
       if (status === 'completed' && resultUrl) {
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current);
-        }
+        clearInterval(polling);
+        pollingRef.current = null;
         setState((prev) => ({
           ...prev,
           step: 'completed',
@@ -111,9 +119,8 @@ export default function GeneratePage() {
           resultUrl,
         }));
       } else if (status === 'failed') {
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current);
-        }
+        clearInterval(polling);
+        pollingRef.current = null;
         setState((prev) => ({
           ...prev,
           step: 'error',
@@ -126,6 +133,7 @@ export default function GeneratePage() {
         }));
       }
     }, 2000); // 每 2 秒轮询一次
+    pollingRef.current = polling;
   }, []);
 
   // 拖拽处理
@@ -165,6 +173,7 @@ export default function GeneratePage() {
   const handleReset = useCallback(() => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
+      pollingRef.current = null;
     }
     setState({ step: 'idle', progress: 0 });
     if (fileInputRef.current) {
