@@ -34,19 +34,23 @@ export default function GeneratePage() {
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const runRef = useRef(0);
 
-  // 清理轮询
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
+  const cancelRun = useCallback(() => {
+    runRef.current += 1;
+    if (pollingRef.current !== null) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
   }, []);
+
+  // 清理轮询并使未完成的上传或生成请求失效
+  useEffect(() => cancelRun, [cancelRun]);
 
   // 处理文件上传
   const handleFile = useCallback(async (file: File) => {
+    cancelRun();
+    const run = runRef.current;
     setState({ step: 'uploading', progress: 10 });
 
     // 1. 上传图片
@@ -54,6 +58,7 @@ export default function GeneratePage() {
     formData.append('file', file);
 
     const uploadResult = await uploadProductImage(formData);
+    if (runRef.current !== run) return;
 
     if (!uploadResult.success || !uploadResult.data) {
       setState({
@@ -72,6 +77,7 @@ export default function GeneratePage() {
 
     // 2. 开始生成模特图
     const generateResult = await generateModelImage(uploadResult.data.url);
+    if (runRef.current !== run) return;
 
     if (!generateResult.success || !generateResult.data) {
       setState((prev) => ({
@@ -93,6 +99,7 @@ export default function GeneratePage() {
 
     // 3. 轮询任务状态
     const polling = setInterval(async () => {
+      if (pollingRef.current !== polling) return;
       const statusResult = await getGenerationStatus(taskId);
       if (pollingRef.current !== polling) return;
 
@@ -134,7 +141,7 @@ export default function GeneratePage() {
       }
     }, 2000); // 每 2 秒轮询一次
     pollingRef.current = polling;
-  }, []);
+  }, [cancelRun]);
 
   // 拖拽处理
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -171,15 +178,12 @@ export default function GeneratePage() {
 
   // 重置状态
   const handleReset = useCallback(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
+    cancelRun();
     setState({ step: 'idle', progress: 0 });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  }, []);
+  }, [cancelRun]);
 
   return (
     <main className="min-h-screen bg-gray-50 py-12 px-4">
